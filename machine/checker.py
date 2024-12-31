@@ -4,6 +4,10 @@ from pathlib import Path
 import re
 import argparse
 import importlib.util
+import openai
+import time
+import joblib
+from trainer import extract_features
 
 # Add dynamic import for zip-extractor
 def import_zip_extractor():
@@ -15,6 +19,9 @@ def import_zip_extractor():
 
 # Get the extract_submissions function
 extract_submissions = import_zip_extractor()
+
+# Add OpenAI configuration
+openai.api_key = 'your-api-key-here'  # Replace with your OpenAI API key
 
 def read_file(file_path):
     with open(file_path, 'r') as file:
@@ -88,6 +95,52 @@ def find_matching_lines(lines1, lines2):
                     matching.append(line1_stripped)
     return matching
 
+def analyze_code_with_ai(code1, code2):
+    """Use AI to analyze code similarity and explain differences"""
+    try:
+        prompt = f"""
+        Compare these two code snippets and explain their similarity:
+        
+        Code 1:
+        {code1}
+        
+        Code 2:
+        {code2}
+        
+        Analyze: structural similarity, logic similarity, variable naming, and potential plagiarism.
+        Return a JSON with fields: similarity_score (0-100), explanation, matched_patterns
+        """
+        
+        response = openai.Completion.create(
+            engine="text-davinci-003",
+            prompt=prompt,
+            max_tokens=500,
+            temperature=0.3
+        )
+        
+        analysis = response.choices[0].text
+        return analysis
+    except Exception as e:
+        print(f"AI analysis error: {e}")
+        return None
+
+def check_similarity_with_ai(code1, code2):
+    """Use trained model to check similarity"""
+    try:
+        model = joblib.load('model.joblib')
+        features = extract_features(code1, code2)
+        prediction = model.predict([list(features.values())])
+        probability = model.predict_proba([list(features.values())])
+        
+        return {
+            'is_plagiarism': bool(prediction[0]),
+            'confidence': float(max(probability[0]) * 100),
+            'features': features
+        }
+    except Exception as e:
+        print(f"AI model error: {e}")
+        return None
+
 def check_all_submissions(template_path=None):
     submissions = extract_submissions()
     results = []
@@ -102,6 +155,7 @@ def check_all_submissions(template_path=None):
             file2 = submissions[j]
             
             try:
+                # Calculate basic similarity
                 similarity_ratio, unique1, unique2, _, _ = calculate_similarity(
                     file1['content'],
                     file2['content'],
@@ -110,12 +164,37 @@ def check_all_submissions(template_path=None):
                 
                 if similarity_ratio >= 80:
                     matching_lines = find_matching_lines(unique1, unique2)
-                    results.append({
+                    
+                    # Add AI analysis for high-similarity matches
+                    ai_analysis = analyze_code_with_ai(
+                        ''.join(file1['content']),
+                        ''.join(file2['content'])
+                    )
+                    
+                    ai_result = check_similarity_with_ai(
+                        ''.join(file1['content']),
+                        ''.join(file2['content'])
+                    )
+                    
+                    result = {
                         'file1': f"{file1['zip_path'].name}/{file1['file_path']}",
                         'file2': f"{file2['zip_path'].name}/{file2['file_path']}",
                         'similarity': similarity_ratio,
-                        'matching_lines': matching_lines
-                    })
+                        'matching_lines': matching_lines,
+                        'ai_analysis': ai_analysis
+                    }
+                    
+                    if ai_result:
+                        result.update({
+                            'ai_prediction': ai_result['is_plagiarism'],
+                            'ai_confidence': ai_result['confidence'],
+                            'features': ai_result['features']
+                        })
+                    
+                    results.append(result)
+                    
+                    # Rate limit API calls
+                    time.sleep(1)
                 
             except Exception as e:
                 pass
@@ -137,17 +216,26 @@ def main():
     results.sort(key=lambda x: x['similarity'], reverse=True)
     
     print("=" * 50)
-    print("CODE SIMILARITY ANALYSIS")
+    print("AI-POWERED CODE SIMILARITY ANALYSIS")
     print("=" * 50)
     
     for result in results:
         print(f"\n{'-' * 50}")
         print(f"{result['file1']} <-> {result['file2']}")
-        print(f"Similarity: {result['similarity']}%")
-        if result['matching_lines']:
-            print("\nMatching code:")
-            for line in result['matching_lines']:
-                print(f"  {line}")
+        print(f"Basic Similarity: {result['similarity']}%")
+        
+        if result['ai_analysis']:
+            print("\nAI Analysis:")
+            print(result['ai_analysis'])
+        
+        if 'ai_prediction' in result:
+            print(f"AI Prediction: {'Plagiarism' if result['ai_prediction'] else 'No Plagiarism'}")
+            print(f"AI Confidence: {result['ai_confidence']}%")
+            print(f"Features: {result['features']}")
+            
+        print("\nMatching code patterns:")
+        for line in result['matching_lines']:
+            print(f"  {line}")
         print(f"{'-' * 50}")
 
 if __name__ == '__main__':
