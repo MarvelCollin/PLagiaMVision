@@ -9,5 +9,8 @@ int main() {
 
 
 
-    
 }
+
+void test() {
+    printf("aksjdaisjdasdasdsadj"); 
+    }
