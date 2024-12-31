@@ -75,74 +75,80 @@ def calculate_similarity(file1_lines, file2_lines, template_path=None):
         print(f"Warning: Template processing error - {e}")
         return 0.0, [], [], [], []
 
+def find_matching_lines(lines1, lines2):
+    """Find identical lines between two files"""
+    matching = []
+    for line1 in lines1:
+        line1_stripped = line1.strip()
+        if not line1_stripped:
+            continue
+        for line2 in lines2:
+            if line1_stripped == line2.strip():
+                if line1_stripped not in matching:
+                    matching.append(line1_stripped)
+    return matching
+
 def check_all_submissions(template_path=None):
-    # Get files from zips
     submissions = extract_submissions()
-    
-    # Compare each pair of submissions
     results = []
-    for i in range(len(submissions)):
-        for j in range(i + 1, len(submissions)):
+    total_files = len(submissions)
+    
+    for i in range(total_files):
+        for j in range(total_files):
+            if i == j:
+                continue
+                
             file1 = submissions[i]
             file2 = submissions[j]
             
             try:
-                # Use content directly from zip
-                file1_lines = file1['content']
-                file2_lines = file2['content']
-                
-                similarity_ratio, unique1, unique2, excluded1, excluded2 = calculate_similarity(
-                    file1_lines, file2_lines, template_path
+                similarity_ratio, unique1, unique2, _, _ = calculate_similarity(
+                    file1['content'],
+                    file2['content'],
+                    template_path
                 )
                 
-                results.append({
-                    'file1': f"{file1['zip_path'].name}/{file1['file_path']}",
-                    'file2': f"{file2['zip_path'].name}/{file2['file_path']}",
-                    'similarity': similarity_ratio,
-                    'unique1': unique1,
-                    'unique2': unique2,
-                    'excluded1': excluded1,
-                    'excluded2': excluded2
-                })
+                if similarity_ratio >= 80:
+                    matching_lines = find_matching_lines(unique1, unique2)
+                    results.append({
+                        'file1': f"{file1['zip_path'].name}/{file1['file_path']}",
+                        'file2': f"{file2['zip_path'].name}/{file2['file_path']}",
+                        'similarity': similarity_ratio,
+                        'matching_lines': matching_lines
+                    })
                 
             except Exception as e:
-                print(f"Error comparing {file1['file_path']} and {file2['file_path']}: {e}")
+                pass
     
     return results
+
+def clear_screen():
+    os.system('cls' if os.name == 'nt' else 'clear')
 
 def main():
     parser = argparse.ArgumentParser(description='Code Similarity Checker')
     parser.add_argument('--template', type=str, help='Path to template file')
     args = parser.parse_args()
     
-    # Check all submissions
-    results = check_all_submissions(args.template)
+    # Clear screen before showing results
+    clear_screen()
     
-    # Print results
-    print("\n=== Similarity Analysis Results ===")
+    results = check_all_submissions(args.template)
+    results.sort(key=lambda x: x['similarity'], reverse=True)
+    
+    print("=" * 50)
+    print("CODE SIMILARITY ANALYSIS")
+    print("=" * 50)
+    
     for result in results:
-        print(f"\nComparing {result['file1']} with {result['file2']}")
+        print(f"\n{'-' * 50}")
+        print(f"{result['file1']} <-> {result['file2']}")
         print(f"Similarity: {result['similarity']}%")
-        
-        if result['similarity'] > 80:  # High similarity threshold
-            print("\nDetailed Analysis:")
-            print("\nTemplate Lines Excluded from File 1:")
-            for line in result['excluded1']:
-                print(f"[-] {line.strip()}")
-            
-            print("\nTemplate Lines Excluded from File 2:")
-            for line in result['excluded2']:
-                print(f"[-] {line.strip()}")
-            
-            print("\nUnique Lines in File 1:")
-            for line in result['unique1']:
-                if line.strip():
-                    print(f"[+] {line.strip()}")
-            
-            print("\nUnique Lines in File 2:")
-            for line in result['unique2']:
-                if line.strip():
-                    print(f"[+] {line.strip()}")
+        if result['matching_lines']:
+            print("\nMatching code:")
+            for line in result['matching_lines']:
+                print(f"  {line}")
+        print(f"{'-' * 50}")
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     main()
