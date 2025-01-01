@@ -1,0 +1,65 @@
+{
+  "submissions": [
+    {
+      "traineeNumber": "T202 - Womp Womp",
+      "forumQuestion": "Apa saja prinsip utama dalam Pemrograman Berorientasi Objek?",
+      "forumAnswer": "OOP didasarkan pada empat prinsip utama: enkapsulasi, pewarisan, polimorfisme, dan abstraksi...",
+      "similarityResults": {
+        "submission": 85,
+        "browser": 45,
+        "ai": 20
+      },
+      "overallPlagiarismScore": 78,
+      "matchedSources": [
+        {
+          "type": "submission",
+          "source": "T201 - Paulina",
+          "similarity": 85,
+          "sourceAnswer": "OOP memiliki empat prinsip dasar yaitu enkapsulasi untuk menyembunyikan data, pewarisan untuk menurunkan sifat, polimorfisme untuk berbagai bentuk, dan abstraksi untuk menyederhanakan..."
+        },
+        {
+          "type": "browser",
+          "source": "stackoverflow.com/questions/1234",
+          "similarity": 45
+        }
+      ]
+    },
+    {
+      "traineeNumber": "T061 - Marvel Collin",
+      "forumQuestion": "Jelaskan konsep REST API.",
+      "forumAnswer": "REST (Representational State Transfer) adalah gaya arsitektur untuk merancang aplikasi jaringan...",
+      "similarityResults": {
+        "submission": 25,
+        "browser": 90,
+        "ai": 15
+      },
+      "overallPlagiarismScore": 65,
+      "matchedSources": [
+        {
+          "type": "browser",
+          "source": "developer.mozilla.org/docs/rest",
+          "similarity": 90
+        }
+      ]
+    },
+    {
+      "traineeNumber": "T062 - Stiphen Taniarday",
+      "forumQuestion": "Apa perbedaan antara var, let, dan const dalam JavaScript?",
+      "forumAnswer": "Perbedaan utama antara var, let, dan const melibatkan ruang lingkup, hoisting, dan kemampuan pengubahan nilai...",
+      "similarityResults": {
+        "submission": 15,
+        "browser": 30,
+        "ai": 95
+      },
+      "overallPlagiarismScore": 82,
+      "matchedSources": [
+        {
+          "type": "ai",
+          "source": "ChatGPT",
+          "similarity": 95,
+          "possiblePrompt": "Explain the differences between var, let, and const in JavaScript with examples"
+        }
+      ]
+    }
+  ]
+}

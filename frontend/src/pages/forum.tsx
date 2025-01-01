@@ -1,9 +1,12 @@
 import React, { useState } from "react";
 import Loading from '../components/interactives/loading';
+import SubmissionResult from '../components/result-components/forum-result';
 
 export default function Forum() {
     const [selectedInputType, setSelectedInputType] = useState<string | null>(null);
     const [isProcessing, setIsProcessing] = useState(false);
+    const [showResults, setShowResults] = useState(false);
+    const [results, setResults] = useState(null);
 
     const features = [
         {
@@ -104,8 +107,35 @@ export default function Forum() {
     const handleProcess = async () => {
         setIsProcessing(true);
         await new Promise(resolve => setTimeout(resolve, 2000));
+        
+        const response = await fetch('public/dummy/result.json');
+        const data = await response.json();
+        setResults(data.submissions);
+        
         setIsProcessing(false);
+        setShowResults(true);
     };
+
+    if (showResults && results) {
+        return (
+            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+                <h2 className="text-2xl font-bold text-gray-800 dark:text-white mb-8">
+                    Analysis Results
+                </h2>
+                <div className="space-y-6">
+                    {results.map((submission, index) => (
+                        <SubmissionResult key={index} submission={submission} />
+                    ))}
+                </div>
+                <button
+                    onClick={() => setShowResults(false)}
+                    className="mt-8 bg-blue-500 text-white px-8 py-3 rounded-lg hover:bg-blue-600 transition-colors"
+                >
+                    Back to Input
+                </button>
+            </div>
+        );
+    }
 
     return (
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
