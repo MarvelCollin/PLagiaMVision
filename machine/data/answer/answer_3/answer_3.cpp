@@ -2,15 +2,8 @@
 using namespace std;
 
 int main() {
-
-
-
-
-
-
-
 }
 
 void test() {
-    printf("aksjdaisjdasdaaaaaaaaaasdsadj"); 
-    }aa
+    printf("aksjdaisjdasdasdsadj"); 
+    }

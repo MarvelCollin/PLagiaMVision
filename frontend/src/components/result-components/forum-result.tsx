@@ -6,7 +6,7 @@ interface MatchedSource {
   source: string;
   similarity: number;
   sourceAnswer?: string;
-  possiblePrompt?: string;  // Add this line
+  possiblePrompt?: string; 
 }
 
 interface SimilarityResults {
