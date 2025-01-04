@@ -94,41 +94,84 @@ def check_plagiarism():
     else:
         print("\nNo suspicious similarities found.")
 
-def check_plagiarism_files(file_paths):
-    """Check plagiarism between different user submissions"""
+def check_plagiarism_files(file_paths, progress_queue=None, similarity_threshold=0.7, batch_size=1000):
+    """Check plagiarism between all files across all submissions"""
     results = []
     
-    # Organize submissions by user
+    if progress_queue:
+        progress_queue.put({"status": "processing", "stage": "Organizing submissions", "progress": 0})
+    
+    # Organize submissions
     submissions = organize_submissions(file_paths)
     users = list(submissions.keys())
     
-    # Compare each user's submission with other users
-    for i, user1 in enumerate(users):
-        for user2 in users[i+1:]:
-            # Compare all files from user1 with all files from user2
-            for idx1, code1 in enumerate(submissions[user1]):
-                code1_normalized = normalize_code(code1)
+    # Create a flat list of all files with their metadata
+    all_files = []
+    for user, files in submissions.items():
+        for filename, content in files:
+            all_files.append({
+                'user': user,
+                'filename': filename,
+                'content': content,
+                'normalized': normalize_code(content)
+            })
+    
+    total_comparisons = (len(all_files) * (len(all_files) - 1)) // 2
+    comparisons_done = 0
+    
+    # Compare each file with every other file
+    for i, file1 in enumerate(all_files):
+        for j, file2 in enumerate(all_files[i+1:], i+1):
+            # Skip comparison if files are from the same user
+            if file1['user'] == file2['user']:
+                continue
                 
-                for idx2, code2 in enumerate(submissions[user2]):
-                    code2_normalized = normalize_code(code2)
-                    
-                    similarity = get_similarity(code1_normalized, code2_normalized)
-                    if similarity > 0.7:  # Threshold for suspicious similarity
-                        similar_segments = get_similar_segments(code1, code2)
-                        results.append({
-                            'file1': f"{user1}/file_{idx1+1}",
-                            'file2': f"{user2}/file_{idx2+1}",
-                            'user1': user1,
-                            'user2': user2,
-                            'similarity': float(f"{similarity:.4f}"),
-                            'similar_segments': similar_segments,
-                            'originalCode1': code1,
-                            'originalCode2': code2
-                        })
+            comparisons_done += 1
+            
+            # Quick similarity check first
+            similarity = get_similarity(file1['normalized'], file2['normalized'])
+            
+            if similarity > similarity_threshold:
+                similar_segments = get_similar_segments(file1['content'], file2['content'])
+                
+                if similar_segments:  # Only add if there are actual similar segments
+                    results.append({
+                        'file1': f"{file1['filename']}",
+                        'file2': f"{file2['filename']}",
+                        'user1': file1['user'],
+                        'user2': file2['user'],
+                        'similarity': float(f"{similarity:.4f}"),
+                        'similar_segments': similar_segments,
+                        'originalCode1': file1['content'],
+                        'originalCode2': file2['content']
+                    })
+            
+            # Update progress
+            if progress_queue and comparisons_done % 100 == 0:
+                progress_queue.put({
+                    "status": "processing",
+                    "stage": f"Comparing files ({comparisons_done}/{total_comparisons})",
+                    "progress": (comparisons_done / total_comparisons) * 100,
+                    "currentComparison": {
+                        "user1": file1['user'],
+                        "user2": file2['user'],
+                        "file1": file1['filename'],
+                        "file2": file2['filename']
+                    }
+                })
+    
+    # Sort results by similarity
+    results.sort(key=lambda x: x['similarity'], reverse=True)
     
     return {
         "timestamp": datetime.now().isoformat(),
-        "results": results
+        "results": results[:batch_size],  # Limit number of results
+        "summary": {
+            "total_submissions": len(users),
+            "total_files": len(all_files),
+            "total_comparisons": comparisons_done,
+            "significant_matches": len(results)
+        }
     }
 
 def process_comparison(file1, file2, code1, code2, results):

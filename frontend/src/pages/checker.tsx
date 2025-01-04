@@ -14,11 +14,33 @@ interface PlagiarismResult {
     originalCode2?: string;
 }
 
+interface AnalysisSummary {
+    total_submissions: number;
+    total_files: number;
+    total_comparisons: number;
+    significant_matches: number;
+}
+
+interface ProgressState {
+    status: 'processing' | 'complete' | 'error';
+    stage?: string;
+    progress?: number;
+    currentComparison?: {
+        user1: string;
+        user2: string;
+        file1: string;
+        file2: string;
+    };
+    summary?: AnalysisSummary;
+}
+
 export default function Checker() {
     const [isProcessing, setIsProcessing] = useState(false);
     const [files, setFiles] = useState<File[]>([]);
     const [results, setResults] = useState<PlagiarismResult[]>([]);
     const [showResults, setShowResults] = useState(false);
+    const [progress, setProgress] = useState<ProgressState | null>(null);
+    const [similarityThreshold, setSimilarityThreshold] = useState(0.7);
     const features = [
         {
             title: "Single File Analysis",
@@ -63,9 +85,36 @@ export default function Checker() {
         }
     };
 
+    const listenToProgress = (sessionId: string) => {
+        const eventSource = new EventSource(`http://localhost:5000/progress/${sessionId}`);
+        
+        eventSource.onmessage = (event) => {
+            const data = JSON.parse(event.data);
+            setProgress(data);
+            
+            if (data.status === 'complete') {
+                setResults(data.results.results);
+                setShowResults(true);
+                eventSource.close();
+                setIsProcessing(false);
+            } else if (data.status === 'error') {
+                alert('Error processing files: ' + data.message);
+                eventSource.close();
+                setIsProcessing(false);
+            }
+        };
+
+        eventSource.onerror = () => {
+            eventSource.close();
+            setIsProcessing(false);
+            alert('Lost connection to server');
+        };
+    };
+
     const handleProcess = async () => {
         setIsProcessing(true);
         setShowResults(false);
+        setProgress(null);
         
         try {
             const formData = new FormData();
@@ -82,22 +131,12 @@ export default function Checker() {
                 throw new Error('Failed to process files');
             }
 
-            const result = await response.json();
-            setResults(result.results);
-            setShowResults(true);
-            
-            // Store results in Firebase
-            const timestamp = new Date().toISOString();
-            await writeData(`plagiarism-results/${timestamp}`, {
-                timestamp,
-                files: files.map(f => f.name),
-                results: result.results
-            });
+            const { session_id } = await response.json();
+            listenToProgress(session_id);
 
         } catch (error) {
             console.error('Error processing files:', error);
             alert('Error processing files. Please try again.');
-        } finally {
             setIsProcessing(false);
         }
     };
@@ -193,13 +232,50 @@ export default function Checker() {
                     </div>
                 )}
 
+                <div className="mt-4">
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                        Similarity Threshold ({(similarityThreshold * 100).toFixed(0)}%)
+                    </label>
+                    <input
+                        type="range"
+                        min="50"
+                        max="90"
+                        value={similarityThreshold * 100}
+                        onChange={(e) => setSimilarityThreshold(Number(e.target.value) / 100)}
+                        className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer dark:bg-gray-700"
+                    />
+                    <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
+                        Adjust to control sensitivity of plagiarism detection
+                    </p>
+                </div>
+
                 <div className="mt-8 text-center">
                     {isProcessing ? (   
                         <div className="flex flex-col items-center space-y-4">
                             <Loading size="large" />
-                            <p className="text-gray-600 dark:text-gray-300">
-                                Analyzing files...
-                            </p>
+                            <div className="w-full max-w-md">
+                                {progress && (
+                                    <>
+                                        <p className="text-gray-600 dark:text-gray-300 mb-2">
+                                            {progress.stage}
+                                        </p>
+                                        {progress.progress !== undefined && (
+                                            <div className="w-full bg-gray-200 rounded-full h-2.5 dark:bg-gray-700 mb-4">
+                                                <div 
+                                                    className="bg-blue-600 h-2.5 rounded-full transition-all duration-500" 
+                                                    style={{ width: `${progress.progress}%` }}
+                                                ></div>
+                                            </div>
+                                        )}
+                                        {progress.currentComparison && (
+                                            <p className="text-sm text-gray-500 dark:text-gray-400">
+                                                Comparing {progress.currentComparison.user1}'s {progress.currentComparison.file1} with<br/>
+                                                {progress.currentComparison.user2}'s {progress.currentComparison.file2}
+                                            </p>
+                                        )}
+                                    </>
+                                )}
+                            </div>
                         </div>
                     ) : (
                         <button
@@ -211,6 +287,32 @@ export default function Checker() {
                         </button>
                     )}
                 </div>
+
+                {progress?.summary && (
+                    <div className="mt-4 p-4 bg-gray-50 dark:bg-gray-700 rounded-lg">
+                        <h3 className="text-lg font-semibold text-gray-800 dark:text-white mb-2">
+                            Analysis Summary
+                        </h3>
+                        <div className="grid grid-cols-4 gap-4 text-sm">
+                            <div>
+                                <p className="text-gray-500 dark:text-gray-400">Total Submissions</p>
+                                <p className="text-lg font-semibold">{progress.summary.total_submissions}</p>
+                            </div>
+                            <div>
+                                <p className="text-gray-500 dark:text-gray-400">Total Files</p>
+                                <p className="text-lg font-semibold">{progress.summary.total_files}</p>
+                            </div>
+                            <div>
+                                <p className="text-gray-500 dark:text-gray-400">Files Compared</p>
+                                <p className="text-lg font-semibold">{progress.summary.total_comparisons}</p>
+                            </div>
+                            <div>
+                                <p className="text-gray-500 dark:text-gray-400">Matches Found</p>
+                                <p className="text-lg font-semibold">{progress.summary.significant_matches}</p>
+                            </div>
+                        </div>
+                    </div>
+                )}
 
                 {showResults && (
                     <div className="mt-8 bg-white dark:bg-gray-800 p-6 rounded-xl">
