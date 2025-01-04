@@ -8,7 +8,7 @@ from pathlib import Path
 # Add the parent directory to Python path
 sys.path.append(str(Path(__file__).parent))
 
-from helper.extractor import read_file_content
+from helper.extractor import read_file_content, organize_submissions
 import json
 from datetime import datetime
 
@@ -93,6 +93,58 @@ def check_plagiarism():
         print(f"\nPotential plagiarism detected. Results saved to {result_path}")
     else:
         print("\nNo suspicious similarities found.")
+
+def check_plagiarism_files(file_paths):
+    """Check plagiarism between different user submissions"""
+    results = []
+    
+    # Organize submissions by user
+    submissions = organize_submissions(file_paths)
+    users = list(submissions.keys())
+    
+    # Compare each user's submission with other users
+    for i, user1 in enumerate(users):
+        for user2 in users[i+1:]:
+            # Compare all files from user1 with all files from user2
+            for idx1, code1 in enumerate(submissions[user1]):
+                code1_normalized = normalize_code(code1)
+                
+                for idx2, code2 in enumerate(submissions[user2]):
+                    code2_normalized = normalize_code(code2)
+                    
+                    similarity = get_similarity(code1_normalized, code2_normalized)
+                    if similarity > 0.7:  # Threshold for suspicious similarity
+                        similar_segments = get_similar_segments(code1, code2)
+                        results.append({
+                            'file1': f"{user1}/file_{idx1+1}",
+                            'file2': f"{user2}/file_{idx2+1}",
+                            'user1': user1,
+                            'user2': user2,
+                            'similarity': float(f"{similarity:.4f}"),
+                            'similar_segments': similar_segments,
+                            'originalCode1': code1,
+                            'originalCode2': code2
+                        })
+    
+    return {
+        "timestamp": datetime.now().isoformat(),
+        "results": results
+    }
+
+def process_comparison(file1, file2, code1, code2, results):
+    similarity = get_similarity(code1, code2)
+    if similarity > 0.7:  # Threshold for suspicious similarity
+        similar_segments = get_similar_segments(code1, code2)
+        results.append({
+            'file1': str(file1.name),
+            'file2': str(file2.name),
+            'directory1': str(file1.parent.name),
+            'directory2': str(file2.parent.name),
+            'similarity': float(f"{similarity:.4f}"),
+            'similar_segments': similar_segments,
+            'originalCode1': code1,
+            'originalCode2': code2
+        })
 
 if __name__ == "__main__":
     check_plagiarism()

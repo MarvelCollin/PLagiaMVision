@@ -1,10 +1,24 @@
 import React, { useState } from "react";
 import Loading from '../components/interactives/loading';
 import { writeData, readData } from '../firebase/firebaseUtils';
+import { DiffView } from '../components/result-components/diff-view';
+
+interface PlagiarismResult {
+    file1: string;
+    file2: string;
+    user1: string;
+    user2: string;
+    similarity: number;
+    similar_segments: string[];
+    originalCode1?: string;
+    originalCode2?: string;
+}
 
 export default function Checker() {
     const [isProcessing, setIsProcessing] = useState(false);
     const [files, setFiles] = useState<File[]>([]);
+    const [results, setResults] = useState<PlagiarismResult[]>([]);
+    const [showResults, setShowResults] = useState(false);
     const features = [
         {
             title: "Single File Analysis",
@@ -38,11 +52,11 @@ export default function Checker() {
             
             const validFiles = uploadedFiles.filter(file => {
                 const extension = file.name.split('.').pop()?.toLowerCase();
-                return ['pdf', 'doc', 'docx', 'txt', 'zip'].includes(extension || '');
+                return ['zip'].includes(extension || '');
             });
 
             if (validFiles.length !== uploadedFiles.length) {
-                alert('Some files were rejected. Only PDF, DOC, DOCX, TXT, and ZIP files are supported.');
+                alert('Only ZIP files are supported for user submissions.');
             }
 
             setFiles(validFiles);
@@ -51,8 +65,41 @@ export default function Checker() {
 
     const handleProcess = async () => {
         setIsProcessing(true);
-        await new Promise(resolve => setTimeout(resolve, 2000));
-        setIsProcessing(false);
+        setShowResults(false);
+        
+        try {
+            const formData = new FormData();
+            files.forEach((file) => {
+                formData.append('files', file);
+            });
+
+            const response = await fetch('http://localhost:5000/check-plagiarism', {
+                method: 'POST',
+                body: formData,
+            });
+
+            if (!response.ok) {
+                throw new Error('Failed to process files');
+            }
+
+            const result = await response.json();
+            setResults(result.results);
+            setShowResults(true);
+            
+            // Store results in Firebase
+            const timestamp = new Date().toISOString();
+            await writeData(`plagiarism-results/${timestamp}`, {
+                timestamp,
+                files: files.map(f => f.name),
+                results: result.results
+            });
+
+        } catch (error) {
+            console.error('Error processing files:', error);
+            alert('Error processing files. Please try again.');
+        } finally {
+            setIsProcessing(false);
+        }
     };
 
     const handleTestWrite = async () => {
@@ -112,21 +159,21 @@ export default function Checker() {
                     <input
                         type="file"
                         multiple
-                        accept=".pdf,.doc,.docx,.txt,.zip"
+                        accept=".zip"
                         className="hidden"
                         id="file-upload"
                         onChange={handleFileUpload}
                     />
                     <label
                         htmlFor="file-upload"
-                        className="cursor-pointer text-blue-500 hover:text-blue-600"
+                        className="cursor-pointer text-blue-500 hover:text-blue-600 block"
                     >
                         <span className="text-4xl mb-2 block">📁</span>
                         <span className="text-gray-800 dark:text-white">
-                            Click to upload files or drag and drop
+                            Upload Student Submissions (ZIP files)
                         </span>
                         <p className="text-sm text-gray-500 dark:text-gray-400 mt-2">
-                            Supported formats: PDF, DOC, DOCX, TXT, ZIP
+                            Each ZIP file represents one student's submission
                         </p>
                     </label>
                 </div>
@@ -146,8 +193,8 @@ export default function Checker() {
                     </div>
                 )}
 
-                {/* <div className="mt-8 text-center">
-                    {isProcessing ? (
+                <div className="mt-8 text-center">
+                    {isProcessing ? (   
                         <div className="flex flex-col items-center space-y-4">
                             <Loading size="large" />
                             <p className="text-gray-600 dark:text-gray-300">
@@ -163,7 +210,61 @@ export default function Checker() {
                             Start Analysis
                         </button>
                     )}
-                </div> */}
+                </div>
+
+                {showResults && (
+                    <div className="mt-8 bg-white dark:bg-gray-800 p-6 rounded-xl">
+                        <h2 className="text-2xl font-bold text-gray-800 dark:text-white mb-6">
+                            Analysis Results
+                        </h2>
+                        {results.length > 0 ? (
+                            <div className="space-y-8">
+                                {results.map((result, index) => (
+                                    <div key={index} className="border rounded-lg p-4 bg-gray-50 dark:bg-gray-700">
+                                        <div className="flex justify-between items-center mb-4">
+                                            <div>
+                                                <h3 className="text-lg font-semibold text-gray-800 dark:text-white">
+                                                    Match #{index + 1}
+                                                </h3>
+                                                <p className="text-gray-600 dark:text-gray-300">
+                                                    Student: {result.user1} ⟷ Student: {result.user2}
+                                                </p>
+                                                <p className="text-sm text-gray-500">
+                                                    Files: {result.file1} ⟷ {result.file2}
+                                                </p>
+                                            </div>
+                                            <div className="text-right">
+                                                <span className={`text-lg font-bold ${
+                                                    result.similarity > 0.8 ? 'text-red-500' : 
+                                                    result.similarity > 0.6 ? 'text-yellow-500' : 'text-green-500'
+                                                }`}>
+                                                    {(result.similarity * 100).toFixed(1)}% Similar
+                                                </span>
+                                            </div>
+                                        </div>
+                                        {result.similar_segments.map((segment, idx) => (
+                                            <div key={idx} className="mt-4">
+                                                <h4 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
+                                                    Similar Segment #{idx + 1}:
+                                                </h4>
+                                                <DiffView
+                                                    code1={segment}
+                                                    code2={segment}
+                                                    fileName1={result.file1}
+                                                    fileName2={result.file2}
+                                                />
+                                            </div>
+                                        ))}
+                                    </div>
+                                ))}
+                            </div>
+                        ) : (
+                            <p className="text-center text-gray-600 dark:text-gray-300">
+                                No significant similarities found between the files.
+                            </p>
+                        )}
+                    </div>
+                )}
 
                 <div className="mt-8 flex justify-center gap-4">
                     <button
