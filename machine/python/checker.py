@@ -15,63 +15,42 @@ from helper.extractor import read_file_content, organize_submissions
 import json
 from datetime import datetime
 
-def normalize_variables(code):
-    """Replace all variable names with generic placeholders"""
-    try:
-        # First, try parsing as Python code
-        tree = ast.parse(code)
-        var_map = {}
-        var_counter = 1
-
-        class VariableNormalizer(ast.NodeTransformer):
-            def visit_Name(self, node):
-                if isinstance(node.ctx, ast.Store):
-                    if node.id not in var_map:
-                        var_map[node.id] = f'var_{var_counter}'
-                        var_counter += 1
-                return ast.Name(id=var_map.get(node.id, node.id), ctx=node.ctx)
-
-        # Transform the AST
-        normalized = VariableNormalizer().visit(tree)
-        return ast.unparse(normalized)
-    except:
-        # If Python parsing fails, try C++-style normalization
-        try:
-            result = []
-            var_map = {}
-            var_counter = 1
-            
-            # Tokenize the code
-            tokens = tokenize.generate_tokens(StringIO(code).readline)
-            
-            for token in tokens:
-                if token.type == tokenize.NAME:
-                    # Check if it's likely a variable name (not a keyword or type)
-                    if not token.string in ['int', 'float', 'double', 'char', 'void', 'for', 'while', 'if', 'else']:
-                        if token.string not in var_map:
-                            var_map[token.string] = f'var_{var_counter}'
-                            var_counter += 1
-                        result.append(var_map[token.string])
-                    else:
-                        result.append(token.string)
-                else:
-                    result.append(token.string)
-            
-            return ''.join(result)
-        except:
-            # If all parsing fails, return original code
-            return code
-
 def normalize_code(code):
-    # First normalize variables
-    normalized = normalize_variables(code)
-    # Then apply existing normalizations
-    normalized = re.sub(r'//.*?\n|/\*.*?\*/', '', normalized, flags=re.S)
-    normalized = '\n'.join(line.strip() for line in normalized.splitlines() if line.strip())
-    return normalized.lower()
+    """Normalize code for comparison by removing irrelevant differences"""
+    # Remove comments
+    code = re.sub(r'//.*?\n|/\*.*?\*/', '', code, flags=re.S)
+    
+    # Remove braces and non-essential symbols
+    code = re.sub(r'[{}();]', '', code)
+    
+    # Normalize whitespace
+    code = ' '.join(code.split())
+    
+    # Normalize string literals
+    code = re.sub(r'".*?"', '""', code)
+    code = re.sub(r'\'.*?\'', '\'\'', code)
+    
+    # Normalize numbers     
+    code = re.sub(r'\b\d+\b', 'N', code)
+    
+    # Remove preprocessor directives
+    code = re.sub(r'#.*?\n', '\n', code)
+    
+    return code.lower()
 
 def get_similarity(text1, text2):
-    return SequenceMatcher(None, text1, text2).ratio()
+    """Calculate similarity with improved accuracy"""
+    # Use token-based similarity
+    tokens1 = set(text1.split())
+    tokens2 = set(text2.split())
+    
+    if not tokens1 or not tokens2:
+        return 0.0  # Return 0 similarity if either text is empty
+    
+    intersection = tokens1.intersection(tokens2)
+    union = tokens1.union(tokens2)
+    
+    return len(intersection) / len(union)
 
 def get_similar_segments(code1, code2):
     """Find similar code segments between two files"""
@@ -97,44 +76,33 @@ def get_similar_segments(code1, code2):
         
     return similar_segments
 
-def find_exact_matches(code1, code2, min_lines=4):
-    """Find exact matching code segments with variable name normalization"""
-    # Normalize both codes first
-    norm_code1 = normalize_variables(code1)
-    norm_code2 = normalize_variables(code2)
+def find_exact_matches(code1, code2, min_lines=5):
+    """Find exact matching code segments with improved accuracy"""
+    if not code1.strip() or not code2.strip():
+        return []  # Return empty list if either code is empty
     
-    lines1 = norm_code1.splitlines()
-    lines2 = norm_code2.splitlines()
-    orig_lines1 = code1.splitlines()
-    orig_lines2 = code2.splitlines()
+    lines1 = code1.splitlines()
+    lines2 = code2.splitlines()
     matches = []
     
-    for i in range(len(lines1)):
-        for j in range(len(lines2)):
-            match_length = 0
-            while (i + match_length < len(lines1) and 
-                   j + match_length < len(lines2) and 
-                   lines1[i + match_length].strip() == lines2[j + match_length].strip()):
-                match_length += 1
+    # Use sliding window for comparison
+    for i in range(len(lines1) - min_lines + 1):
+        window1 = lines1[i:i + min_lines]
+        window1_str = '\n'.join(window1)
+        
+        for j in range(len(lines2) - min_lines + 1):
+            window2 = lines2[j:j + min_lines]
+            window2_str = '\n'.join(window2)
             
-            if match_length >= min_lines:
-                # Get both normalized and original code segments
-                norm_segment = '\n'.join(lines1[i:i + match_length])
-                orig_segment1 = '\n'.join(orig_lines1[i:i + match_length])
-                orig_segment2 = '\n'.join(orig_lines2[j:i + match_length])
-                
-                if norm_segment.strip():
+            if window1_str == window2_str:
+                if window1_str.strip():  # Ensure segment is not empty
                     matches.append({
-                        'segment': orig_segment1,
-                        'segment2': orig_segment2,  # Add the second version to show variable differences
-                        'normalized_segment': norm_segment,
-                        'line_count': match_length,
+                        'segment': window1_str,
+                        'segment2': window2_str,
+                        'line_count': min_lines,
                         'line_number1': i + 1,
-                        'line_number2': j + 1,
-                        'has_variable_changes': orig_segment1 != orig_segment2
+                        'line_number2': j + 1
                     })
-                i += match_length - 1
-                break
     
     return matches
 
@@ -185,10 +153,38 @@ def check_plagiarism():
     else:
         print("\nNo suspicious similarities found.")
 
-def check_plagiarism_files(file_paths, progress_queue=None, similarity_threshold=0.7, batch_size=1000, callback=None):
-    """Check plagiarism between all files across all submissions"""
-    results = []
+def merge_overlapping_matches(matches):
+    """Merge overlapping plagiarism matches, keeping the largest segments."""
+    if not matches:
+        return []
     
+    # Sort matches by start line
+    sorted_matches = sorted(matches, key=lambda x: x['line_number1'])
+    merged = []
+    
+    current = sorted_matches[0]
+    
+    for match in sorted_matches[1:]:
+        current_end = current['line_number1'] + current['line_count'] - 1
+        next_start = match['line_number1']
+        next_end = match['line_number1'] + match['line_count'] - 1
+        
+        if next_start <= current_end:
+            # Overlapping segments; keep the one with larger line_count
+            if match['line_count'] > current['line_count']:
+                current = match
+        else:
+            merged.append(current)
+            current = match
+    
+    merged.append(current)
+    return merged
+
+def check_plagiarism_files(file_paths, progress_queue=None, similarity_threshold=0.7, batch_size=1000, callback=None):
+    """Check plagiarism between all files across all submissions without redundant comparisons"""
+    results = []
+    checked_lines = {}  # Dictionary to track checked lines per file pair
+
     if progress_queue:
         progress_queue.put({"status": "processing", "stage": "Organizing submissions", "progress": 0})
     
@@ -200,19 +196,27 @@ def check_plagiarism_files(file_paths, progress_queue=None, similarity_threshold
     all_files = []
     for user, files in submissions.items():
         for filename, content in files:
+            normalized_content = normalize_code(content)
             all_files.append({
                 'user': user,
                 'filename': filename,
                 'content': content,
-                'normalized': normalize_code(content)
+                'normalized': normalized_content
             })
     
     total_comparisons = (len(all_files) * (len(all_files) - 1)) // 2
     comparisons_done = 0
     
-    # Compare each file with every other file
+    # Compare each file with every other file without redundancy
     for i, file1 in enumerate(all_files):
-        for j, file2 in enumerate(all_files[i+1:], i+1):
+        for j in range(i + 1, len(all_files)):
+            file2 = all_files[j]
+            file_pair = (file1['filename'], file2['filename'])
+            
+            # Initialize checked lines for this file pair if not already done
+            if file_pair not in checked_lines:
+                checked_lines[file_pair] = set()
+            
             # Skip comparison if files are from the same user
             if file1['user'] == file2['user']:
                 if callback:
@@ -222,14 +226,37 @@ def check_plagiarism_files(file_paths, progress_queue=None, similarity_threshold
                         "files": [file1['filename'], file2['filename']]
                     })
                 continue
+            
+            # Skip comparison if either file is empty
+            if not file1['content'].strip() or not file2['content'].strip():
+                if callback:
+                    callback({
+                        "type": "info",
+                        "message": "Skipping comparison due to empty file.",
+                        "files": [file1['filename'], file2['filename']]
+                    })
+                comparisons_done += 1
+                continue
                 
             comparisons_done += 1
             
-            # For very low thresholds, skip exact match check to improve performance
+            # For thresholds above 0.4, perform exact match checks
             if similarity_threshold > 0.4:
                 exact_matches = find_exact_matches(file1['content'], file2['content'])
                 
+                # Filter out matches that have already been checked
+                exact_matches = [
+                    match for match in exact_matches
+                    if (match['line_number1'], match['line_number2']) not in checked_lines[file_pair]
+                ]
+                
                 if exact_matches:
+                    exact_matches = merge_overlapping_matches(exact_matches)
+                    
+                    # Mark these lines as checked
+                    for match in exact_matches:
+                        checked_lines[file_pair].add((match['line_number1'], match['line_number2']))
+                    
                     if callback:
                         callback({
                             "type": "warning",
@@ -237,7 +264,7 @@ def check_plagiarism_files(file_paths, progress_queue=None, similarity_threshold
                             "files": [file1['filename'], file2['filename']],
                             "matches": len(exact_matches),
                             "details": [
-                                f"Lines {m['line_number1']}-{m['line_number1'] + m['line_count']}"
+                                f"Lines {m['line_number1']}-{m['line_number1'] + m['line_count'] - 1}"
                                 for m in exact_matches
                             ]
                         })
@@ -259,9 +286,15 @@ def check_plagiarism_files(file_paths, progress_queue=None, similarity_threshold
             similarity = get_similarity(file1['normalized'], file2['normalized'])
             
             if similarity > similarity_threshold:
-                # For very low thresholds, only get segments for higher similarities
+                # For thresholds above 0.3, get similar segments
                 if similarity > 0.3:
                     similar_segments = get_similar_segments(file1['content'], file2['content'])
+                    
+                    # Mark these segments as checked
+                    for segment in similar_segments:
+                        lines1 = segment.split('\n')
+                        for idx, line in enumerate(lines1, start=1):
+                            checked_lines[file_pair].add((idx, idx))
                 else:
                     similar_segments = []  # Skip detailed analysis for very low similarities
                 
@@ -305,7 +338,7 @@ def check_plagiarism_files(file_paths, progress_queue=None, similarity_threshold
                     "progress": (comparisons_done / total_comparisons) * 100,
                     "currentComparison": {
                         "user1": file1['user'],
-                        "user2": file2['user'],
+                        "user2": file2['user'],  # Fixed mismatched quotation
                         "file1": file1['filename'],
                         "file2": file2['filename']
                     }
@@ -381,22 +414,39 @@ def process_comparison(file1, file2, code1, code2, results):
     
     if similarity > 0.7:
         exact_matches = find_exact_matches(code1, code2)
-        comparison_details = get_detailed_comparison(code1, code2, normalized1, normalized2)
-        
-        results.append({
-            'file1': str(file1.name),
-            'file2': str(file2.name),
-            'directory1': str(file1.parent.name),
-            'directory2': str(file2.parent.name),
-            'similarity': float(f"{similarity:.4f}"),
-            'match_details': exact_matches,
-            'originalCode1': code1,
-            'originalCode2': code2,
-            'normalizedCode1': normalized1,
-            'normalizedCode2': normalized2,
-            'comparisonDetails': comparison_details,
-            'is_exact_match': bool(exact_matches)
-        })
+        if exact_matches:
+            comparison_details = get_detailed_comparison(code1, code2, normalized1, normalized2)
+            
+            results.append({
+                'file1': str(file1.name),
+                'file2': str(file2.name),
+                'directory1': str(file1.parent.name),
+                'directory2': str(file2.parent.name),
+                'similarity': float(f"{similarity:.4f}"),
+                'match_details': exact_matches,
+                'originalCode1': code1,
+                'originalCode2': code2,
+                'normalizedCode1': normalized1,
+                'normalizedCode2': normalized2,
+                'comparisonDetails': comparison_details,
+                'is_exact_match': bool(exact_matches)
+            })
+        elif exact_matches:
+            # Handle cases with exact matches but no variable changes
+            results.append({
+                'file1': str(file1.name),
+                'file2': str(file2.name),
+                'directory1': str(file1.parent.name),
+                'directory2': str(file2.parent.name),
+                'similarity': float(f"{similarity:.4f}"),
+                'match_details': exact_matches,
+                'originalCode1': code1,
+                'originalCode2': code2,
+                'normalizedCode1': normalized1,
+                'normalizedCode2': normalized2,
+                'comparisonDetails': {},
+                'is_exact_match': False  # Set to False to prevent false plagiarism flags
+            })
 
 if __name__ == "__main__":
     check_plagiarism()

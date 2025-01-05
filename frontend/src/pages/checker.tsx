@@ -30,7 +30,6 @@ interface DebugInfo {
     similarityDetails?: {
         totalLines: number;
         matchingLines: number;
-        variableChanges: boolean;
     };
 }
 
@@ -228,7 +227,6 @@ export default function Checker() {
                 totalLines: result.originalCode1?.split('\n').length || 0,
                 matchingLines: result.similar_segments.reduce((acc, segment) => 
                     acc + segment.split('\n').length, 0),
-                variableChanges: result.match_details?.some(m => m.has_variable_changes) || false
             }
         });
     };
@@ -262,7 +260,6 @@ export default function Checker() {
                                         <li>Total Lines: {debugInfo.similarityDetails?.totalLines}</li>
                                         <li>Matching Lines: {debugInfo.similarityDetails?.matchingLines}</li>
                                         <li>Match Percentage: {result.similarity * 100}%</li>
-                                        <li>Variable Names Changed: {debugInfo.similarityDetails?.variableChanges ? 'Yes' : 'No'}</li>
                                     </ul>
                                 </div>
                                 <div className="p-4 bg-gray-50 dark:bg-gray-700 rounded">
@@ -281,11 +278,6 @@ export default function Checker() {
                                 <div key={idx} className="border-t pt-4">
                                     <h4 className="font-semibold mb-2">
                                         Matching Segment {idx + 1} 
-                                        {match.has_variable_changes && (
-                                            <span className="ml-2 text-xs bg-yellow-100 text-yellow-800 px-2 py-1 rounded">
-                                                Variables Changed
-                                            </span>
-                                        )}
                                     </h4>
                                     <div className="grid grid-cols-2 gap-4">
                                         <div>
@@ -615,11 +607,6 @@ export default function Checker() {
                                                     <div key={idx} className="mt-4">
                                                         <h4 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
                                                             Match #{idx + 1} ({match.line_count} lines)
-                                                            {match.has_variable_changes && (
-                                                                <span className="ml-2 text-xs bg-yellow-100 text-yellow-800 px-2 py-1 rounded">
-                                                                    Variable Names Changed
-                                                                </span>
-                                                            )}
                                                         </h4>
                                                         <p className="text-xs text-gray-500 mb-2">
                                                             Found at lines {match.line_number1} and {match.line_number2}

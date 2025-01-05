@@ -2,7 +2,6 @@ import zipfile
 import io
 from pathlib import Path
 from typing import Dict, List
-from .ipynb_parser import extract_code_from_ipynb
 
 def extract_zip_contents(zip_path: Path) -> List[tuple]:
     """Extract all code files from a zip file, returns list of (filename, content)"""

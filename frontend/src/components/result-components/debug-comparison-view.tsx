@@ -68,8 +68,8 @@ export const DebugComparisonView: React.FC<IDebugComparison> = ({
                         {matchDetails.matchingSegments.map((segment, idx) => (
                             <div key={idx} className="mb-4 p-3 border-l-4 border-green-500">
                                 <p className="text-xs text-gray-500 mb-2">
-                                    Lines {segment.start1}-{segment.start1 + segment.length} in file 1 match
-                                    lines {segment.start2}-{segment.start2 + segment.length} in file 2
+                                    Lines {segment.start1}-{segment.start1 + segment.length} in {fileName1} match
+                                    lines {segment.start2}-{segment.start2 + segment.length} in {fileName2}
                                 </p>
                                 <SyntaxHighlighter 
                                     language="cpp"
