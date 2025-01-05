@@ -1,15 +1,9 @@
 import React from 'react';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { tomorrow } from 'react-syntax-highlighter/dist/esm/styles/prism';
+import { IDiffView } from '../../interfaces/IDiffView';
 
-interface DiffViewProps {
-    code1: string;
-    code2: string;
-    fileName1: string;
-    fileName2: string;
-}
-
-export const DiffView: React.FC<DiffViewProps> = ({ code1, code2, fileName1, fileName2 }) => {
+export const DiffView: React.FC<IDiffView> = ({ code1, code2, fileName1, fileName2 }) => {
     const lines1 = code1.split('\n');
     const lines2 = code2.split('\n');
 

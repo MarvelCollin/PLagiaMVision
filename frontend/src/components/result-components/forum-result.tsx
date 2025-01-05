@@ -1,37 +1,9 @@
 import React from 'react';
 import HoverInformation from '../interactives/hover-information';
+import { ISubmission } from '../../interfaces/ISubmission';
+import { getSeverityColor } from '../../hooks/use-get-severity-color';
 
-interface MatchedSource {
-  type: string;
-  source: string;
-  similarity: number;
-  sourceAnswer?: string;
-  possiblePrompt?: string; 
-}
-
-interface SimilarityResults {
-  submission: number;
-  browser: number;
-  ai: number;
-}
-
-interface Submission {
-  traineeNumber: string;
-  forumQuestion: string;
-  forumAnswer: string;
-  similarityResults: SimilarityResults;
-  overallPlagiarismScore: number;
-  matchedSources: MatchedSource[];
-}
-
-const SubmissionResult: React.FC<{ submission: Submission }> = ({ submission }) => {
-
-  const getSeverityColor = (score: number) => {
-    if (score >= 75) return 'text-red-500';
-    if (score >= 50) return 'text-yellow-500';
-    return 'text-green-500';
-  };
-
+const SubmissionResult: React.FC<{ submission: ISubmission }> = ({ submission }) => {
   return (
     <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6 mb-6">
       <div className="flex justify-between items-start mb-4">
@@ -48,7 +20,6 @@ const SubmissionResult: React.FC<{ submission: Submission }> = ({ submission }) 
         </div>
       </div>
 
-      {/* Modified Answer Section - Always visible */}
       <div className="mb-6">
         <div className="bg-gray-50 dark:bg-gray-700 p-4 rounded-lg">
           <h4 className="font-bold text-gray-700 dark:text-gray-300 mb-2">Forum Answer:</h4>

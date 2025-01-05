@@ -79,19 +79,46 @@ def get_progress(session_id):
 
 def process_files_with_progress(files, session_id, progress_queue):
     try:
-        results = check_plagiarism_files(files, progress_queue)
+        # Add initial processing status
+        progress_queue.put({
+            "status": "processing",
+            "stage": "Starting analysis",
+            "analysisDetail": {
+                "type": "info",
+                "message": "Beginning file processing"
+            }
+        })
+
+        results = check_plagiarism_files(
+            files, 
+            progress_queue=progress_queue,
+            callback=lambda detail: progress_queue.put({
+                "status": "processing",
+                "analysisDetail": detail
+            })
+        )
         
-        # Store final results
+        # Store final results with summary
         progress_queue.put({
             "status": "complete",
-            "results": results
+            "results": results,
+            "analysisDetail": {
+                "type": "summary",
+                "message": "Analysis complete",
+                "totalMatches": len(results["results"]),
+                "highestSimilarity": max([r["similarity"] for r in results["results"]]) if results["results"] else 0
+            }
         })
         progress_queue.put("DONE")
         
     except Exception as e:
         progress_queue.put({
             "status": "error",
-            "message": str(e)
+            "message": str(e),
+            "analysisDetail": {
+                "type": "error",
+                "message": f"Error during analysis: {str(e)}"
+            }
         })
         progress_queue.put("DONE")
 
