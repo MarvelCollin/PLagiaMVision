@@ -44,7 +44,7 @@ def handle_upload():
         session_id = datetime.now().strftime("%Y%m%d_%H%M%S")
         progress_queues[session_id] = queue.Queue()
         
-        # Start processing in a separate thread
+        # Start processing in a separate thread 
         thread = threading.Thread(
             target=process_files_with_progress,
             args=(saved_files, session_id, progress_queues[session_id])
