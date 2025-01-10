@@ -66,7 +66,6 @@ export default function Checker() {
     const [results, setResults] = useState<IPlagiarsmResult[]>([]);
     const [showResults, setShowResults] = useState(false);
     const [progress, setProgress] = useState<ProgressState | null>(null);
-    const [similarityThreshold, setSimilarityThreshold] = useState(0.7);
     const [selectedResult, setSelectedResult] = useState<number | null>(null);
     const [debugInfo, setDebugInfo] = useState<DebugInfo | null>(null);
     const [processHistory, setProcessHistory] = useState<ProcessHistory[]>([]);
@@ -101,7 +100,7 @@ export default function Checker() {
     const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
         if (e.target.files) {
             const uploadedFiles = Array.from(e.target.files);
-            
+
             const validFiles = uploadedFiles.filter(file => {
                 const extension = file.name.split('.').pop()?.toLowerCase();
                 return ['zip'].includes(extension || '');
@@ -125,11 +124,11 @@ export default function Checker() {
 
     const listenToProgress = (sessionId: string) => {
         const eventSource = new EventSource(`http://localhost:5000/progress/${sessionId}`);
-        
+
         eventSource.onmessage = (event) => {
             const data = JSON.parse(event.data);
             setProgress(data);
-            
+
             if (data.currentComparison) {
                 addToHistory("Comparing Files", {
                     file1: `${data.currentComparison.user1}/${data.currentComparison.file1}`,
@@ -137,7 +136,7 @@ export default function Checker() {
                     reason: data.stage
                 });
             }
-            
+
             if (data.status === 'complete') {
                 setResults(data.results.results);
                 setShowResults(true);
@@ -161,7 +160,7 @@ export default function Checker() {
         setIsProcessing(true);
         setShowResults(false);
         setProgress(null);
-        
+
         try {
             const formData = new FormData();
             files.forEach((file) => {
@@ -210,14 +209,6 @@ export default function Checker() {
         }
     };
 
-    const getSensitivityLabel = (threshold: number) => {
-        if (threshold <= 0.2) return "Very Low - Will detect most similarities";
-        if (threshold <= 0.4) return "Low - May include coincidental matches";
-        if (threshold <= 0.6) return "Medium - Balanced detection";
-        if (threshold <= 0.8) return "High - Only significant matches";
-        return "Very High - Only nearly identical code";
-    };
-
     const showDetailedAnalysis = (result: IPlagiarsmResult, index: number) => {
         setSelectedResult(index);
         setDebugInfo({
@@ -225,88 +216,17 @@ export default function Checker() {
             normalizedCode2: result.originalCode2,
             similarityDetails: {
                 totalLines: result.originalCode1?.split('\n').length || 0,
-                matchingLines: result.similar_segments.reduce((acc, segment) => 
+                matchingLines: result.similar_segments.reduce((acc, segment) =>
                     acc + segment.split('\n').length, 0),
             }
         });
     };
 
-    const renderAnalysisButtons = () => (
-        <div className="mt-8">
-            {results.map((result, index) => (
-                <div key={index} className="mb-6 p-4 border rounded-lg bg-white dark:bg-gray-800">
-                    <div className="flex justify-between items-center mb-4">
-                        <button
-                            onClick={() => showDetailedAnalysis(result, index)}
-                            className="text-blue-500 hover:text-blue-600"
-                        >
-                            Show Detailed Analysis for Match #{index + 1}
-                        </button>
-                        <span className={`px-3 py-1 rounded-full text-sm ${
-                            result.is_exact_match ? 'bg-red-100 text-red-800' :
-                            result.similarity > 0.8 ? 'bg-red-100 text-red-800' :
-                            'bg-yellow-100 text-yellow-800'
-                        }`}>
-                            {result.similarity * 100}% Match
-                        </span>
-                    </div>
-
-                    {selectedResult === index && debugInfo && (
-                        <div className="mt-4 space-y-4">
-                            <div className="grid grid-cols-2 gap-4 text-sm">
-                                <div className="p-4 bg-gray-50 dark:bg-gray-700 rounded">
-                                    <h4 className="font-semibold mb-2">Match Statistics</h4>
-                                    <ul className="space-y-2">
-                                        <li>Total Lines: {debugInfo.similarityDetails?.totalLines}</li>
-                                        <li>Matching Lines: {debugInfo.similarityDetails?.matchingLines}</li>
-                                        <li>Match Percentage: {result.similarity * 100}%</li>
-                                    </ul>
-                                </div>
-                                <div className="p-4 bg-gray-50 dark:bg-gray-700 rounded">
-                                    <h4 className="font-semibold mb-2">Match Locations</h4>
-                                    <ul className="space-y-2">
-                                        {result.match_details?.map((match, idx) => (
-                                            <li key={idx}>
-                                                Segment {idx + 1}: Lines {match.line_number1} - {match.line_number1 + match.line_count} in File 1
-                                            </li>
-                                        ))}
-                                    </ul>
-                                </div>
-                            </div>
-
-                            {result.match_details?.map((match, idx) => (
-                                <div key={idx} className="border-t pt-4">
-                                    <h4 className="font-semibold mb-2">
-                                        Matching Segment {idx + 1} 
-                                    </h4>
-                                    <div className="grid grid-cols-2 gap-4">
-                                        <div>
-                                            <p className="text-sm text-gray-500 mb-1">Original Code</p>
-                                            <pre className="text-xs bg-gray-50 dark:bg-gray-700 p-2 rounded overflow-x-auto">
-                                                {match.segment}
-                                            </pre>
-                                        </div>
-                                        <div>
-                                            <p className="text-sm text-gray-500 mb-1">Normalized Code</p>
-                                            <pre className="text-xs bg-gray-50 dark:bg-gray-700 p-2 rounded overflow-x-auto">
-                                                {match.normalized_segment}
-                                            </pre>
-                                        </div>
-                                    </div>
-                                </div>
-                            ))}
-                        </div>
-                    )}
-                </div>
-            ))}
-        </div>
-    );
-
     const renderHistory = () => (
         <div className="mt-8 p-4 bg-white dark:bg-gray-800 rounded-xl shadow">
             <div className="flex justify-between items-center mb-4">
                 <h3 className="text-xl font-bold text-gray-800 dark:text-white">Analysis History</h3>
-                <button 
+                <button
                     onClick={() => setShowHistory(false)}
                     className="text-gray-500 hover:text-gray-700"
                 >
@@ -315,18 +235,16 @@ export default function Checker() {
             </div>
             <div className="max-h-[70vh] overflow-y-auto">
                 {processHistory.map((entry, index) => (
-                    <div key={index} className={`mb-4 p-3 border-l-4 ${
-                        entry.details.analysisDetail?.type === 'warning' ? 'border-red-500 bg-red-50 dark:bg-red-900/20' :
+                    <div key={index} className={`mb-4 p-3 border-l-4 ${entry.details.analysisDetail?.type === 'warning' ? 'border-red-500 bg-red-50 dark:bg-red-900/20' :
                         entry.details.analysisDetail?.type === 'detection' ? 'border-yellow-500 bg-yellow-50 dark:bg-yellow-900/20' :
-                        'border-blue-500 bg-gray-50 dark:bg-gray-700'
-                    }`}>
+                            'border-blue-500 bg-gray-50 dark:bg-gray-700'
+                        }`}>
                         <div className="flex justify-between text-sm">
                             <span className="text-gray-500">{new Date(entry.timestamp).toLocaleTimeString()}</span>
-                            <span className={`font-semibold ${
-                                entry.details.analysisDetail?.type === 'warning' ? 'text-red-600' :
+                            <span className={`font-semibold ${entry.details.analysisDetail?.type === 'warning' ? 'text-red-600' :
                                 entry.details.analysisDetail?.type === 'detection' ? 'text-yellow-600' :
-                                'text-blue-600'
-                            }`}>
+                                    'text-blue-600'
+                                }`}>
                                 {entry.details.analysisDetail?.type?.toUpperCase() || entry.action}
                             </span>
                         </div>
@@ -340,11 +258,10 @@ export default function Checker() {
                                 </p>
                             )}
                             {entry.details.analysisDetail?.similarity && (
-                                <p className={`text-sm font-mono ${
-                                    entry.details.analysisDetail.similarity > 0.8 ? 'text-red-500' :
+                                <p className={`text-sm font-mono ${entry.details.analysisDetail.similarity > 0.8 ? 'text-red-500' :
                                     entry.details.analysisDetail.similarity > 0.6 ? 'text-yellow-500' :
-                                    'text-green-500'
-                                }`}>
+                                        'text-green-500'
+                                    }`}>
                                     Similarity: {(entry.details.analysisDetail.similarity * 100).toFixed(1)}%
                                 </p>
                             )}
@@ -399,7 +316,7 @@ export default function Checker() {
                 <h2 className="text-2xl font-bold text-gray-800 dark:text-white mb-8 text-center">
                     Upload Files for Analysis
                 </h2>
-                
+
                 <div className="border-2 border-dashed border-gray-300 dark:border-gray-600 p-8 text-center rounded-lg">
                     <input
                         type="file"
@@ -438,34 +355,8 @@ export default function Checker() {
                     </div>
                 )}
 
-                <div className="mt-4">
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
-                        Similarity Threshold: {(similarityThreshold * 100).toFixed(0)}%
-                    </label>
-                    <div className="mt-2">
-                        <input
-                            type="range"
-                            min="0"
-                            max="100"
-                            value={similarityThreshold * 100}
-                            onChange={(e) => setSimilarityThreshold(Number(e.target.value) / 100)}
-                            className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer dark:bg-gray-700"
-                        />
-                    </div>
-                    <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
-                        Sensitivity: {getSensitivityLabel(similarityThreshold)}
-                    </p>
-                    <div className="mt-2 grid grid-cols-5 text-xs text-gray-400">
-                        <div>Very Low</div>
-                        <div>Low</div>
-                        <div className="text-center">Medium</div>
-                        <div className="text-right">High</div>
-                        <div className="text-right">Very High</div>
-                    </div>
-                </div>
-
                 <div className="mt-8 text-center">
-                    {isProcessing ? (   
+                    {isProcessing ? (
                         <div className="flex flex-col items-center space-y-4">
                             <Loading size="large" />
                             <div className="w-full max-w-md">
@@ -476,15 +367,15 @@ export default function Checker() {
                                         </p>
                                         {progress.progress !== undefined && (
                                             <div className="w-full bg-gray-200 rounded-full h-2.5 dark:bg-gray-700 mb-4">
-                                                <div 
-                                                    className="bg-blue-600 h-2.5 rounded-full transition-all duration-500" 
+                                                <div
+                                                    className="bg-blue-600 h-2.5 rounded-full transition-all duration-500"
                                                     style={{ width: `${progress.progress}%` }}
                                                 ></div>
                                             </div>
                                         )}
                                         {progress.currentComparison && (
                                             <p className="text-sm text-gray-500 dark:text-gray-400">
-                                                Comparing {progress.currentComparison.user1}'s {progress.currentComparison.file1} with<br/>
+                                                Comparing {progress.currentComparison.user1}'s {progress.currentComparison.file1} with<br />
                                                 {progress.currentComparison.user2}'s {progress.currentComparison.file2}
                                             </p>
                                         )}
@@ -500,13 +391,6 @@ export default function Checker() {
                                 disabled={files.length === 0}
                             >
                                 Start Analysis
-                            </button>
-                            <button
-                                className="bg-gray-500 text-white px-6 py-3 rounded-lg hover:bg-gray-600 transition-colors"
-                                onClick={() => setShowHistory(true)}
-                                disabled={processHistory.length === 0}
-                            >
-                                Show Process History
                             </button>
                         </div>
                     )}
@@ -546,11 +430,10 @@ export default function Checker() {
                         {results.length > 0 ? (
                             <>
                                 {results.map((result, index) => (
-                                    <div key={index} className={`border rounded-lg p-4 ${
-                                        result.is_exact_match 
-                                            ? 'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800' 
-                                            : 'bg-gray-50 dark:bg-gray-700'
-                                    }`}>
+                                    <div key={index} className={`border rounded-lg p-4 ${result.is_exact_match
+                                        ? 'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800'
+                                        : 'bg-gray-50 dark:bg-gray-700'
+                                        }`}>
                                         <div className="flex justify-between items-center mb-4">
                                             <div>
                                                 <h3 className="text-lg font-semibold text-gray-800 dark:text-white flex items-center gap-2">
@@ -569,11 +452,10 @@ export default function Checker() {
                                                 </p>
                                             </div>
                                             <div className="text-right">
-                                                <span className={`text-lg font-bold ${
-                                                    result.is_exact_match ? 'text-red-500' :
-                                                    result.similarity > 0.8 ? 'text-red-500' : 
-                                                    result.similarity > 0.6 ? 'text-yellow-500' : 'text-green-500'
-                                                }`}>
+                                                <span className={`text-lg font-bold ${result.is_exact_match ? 'text-red-500' :
+                                                    result.similarity > 0.8 ? 'text-red-500' :
+                                                        result.similarity > 0.6 ? 'text-yellow-500' : 'text-green-500'
+                                                    }`}>
                                                     {result.is_exact_match ? 'Exact Match' : `${(result.similarity * 100).toFixed(1)}% Similar`}
                                                 </span>
                                             </div>
@@ -584,7 +466,7 @@ export default function Checker() {
                                         >
                                             {selectedResult === index ? 'Hide' : 'Show'} Detailed Debug Information
                                         </button>
-                                        
+
                                         {selectedResult === index && (
                                             <DebugComparisonView
                                                 originalCode1={result.originalCode1 || ''}
@@ -645,8 +527,7 @@ export default function Checker() {
                                         )}
                                     </div>
                                 ))}
-                                
-                                {renderAnalysisButtons()}
+
                             </>
                         ) : (
                             <p className="text-center text-gray-600 dark:text-gray-300">
@@ -658,20 +539,6 @@ export default function Checker() {
 
                 {showHistory && renderHistory()}
 
-                <div className="mt-8 flex justify-center gap-4">
-                    <button
-                        className="bg-green-500 text-white px-6 py-2 rounded-lg hover:bg-green-600 transition-colors"
-                        onClick={handleTestWrite}
-                    >
-                        Test Write to Firebase
-                    </button>
-                    <button
-                        className="bg-blue-500 text-white px-6 py-2 rounded-lg hover:bg-blue-600 transition-colors"
-                        onClick={handleTestRead}
-                    >
-                        Test Read from Firebase
-                    </button>
-                </div>
             </div>
         </div>
     );
